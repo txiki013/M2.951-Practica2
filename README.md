@@ -10,7 +10,7 @@ Fitxer R: (Practica 2 - Raúl Morcillo López.Rmd)
     
 Fitxer Csv: (winequality-red_inicials.csv)
 
-    Fitxer amb les dades originals obtingudes de la web [!Kaggle](https://www.kaggle.com/datasets/uciml/red-wine-quality-cortez-et-al-2009)
+    Fitxer amb les dades originals obtingudes de la web [Kaggle](https://www.kaggle.com/datasets/uciml/red-wine-quality-cortez-et-al-2009)
     
 Fitxer Csv: (winequality-red_net.csv)
     
