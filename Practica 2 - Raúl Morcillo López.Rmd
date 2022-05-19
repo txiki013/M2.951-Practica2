@@ -1,0 +1,1215 @@
+---
+title: '*Pràctica 2 - Tipologia i cicle de vida de les dades*'
+author: "Raúl Morcillo López"
+date: "`r format(Sys.time(), '%d/%m/%Y')`"
+output:
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+    toc_depth: 3
+---
+
+```{r,include=F}
+
+knitr::opts_chunk$set(eval=T, echo=T,comment = NULL, echo = F)
+setwd("C:\\Users\\Raul\\Desktop\\Cursos\\06 - UOC - Ciencia de datos\\05 - Tipologia i cicle de vida de les dades\\Practica 2")
+
+library(ggplot2)
+library(patchwork)
+library(rpart)
+library(rpart.plot)
+
+df<-read.csv("winequality-red_inicials.csv",header=T,sep=",", dec=".")
+
+```
+
+
+\newpage
+
+# **Descripció del dataset**
+
+```{r}
+
+str(df)
+
+files=dim(df)[1]
+columnes=dim(df)[2]
+
+```
+
+
+Podem observar que la base de dades conté `r files` observacions i `r columnes` variables.
+
+Aquestes variabels son:
+
+ - **fixed.acidity** variable numèrica
+ - **volatile.acidity** variable numèrica
+ - **citric.acid** variable numèrica
+ - **residual.sugar** variable numèrica
+ - **chlorides** variable numèrica
+ - **free.sulfur.dioxide** variable numèrica
+ - **total.sulfur.dioxide** variable numèrica
+ - **density** variable numèrica
+ - **pH** variable numèrica
+ - **sulphates** variable numèrica
+ - **alcohol** variable numèrica
+ - **quality** variable sencera
+ 
+Totes les variables numèriques fan referència a les característiques químiques dels vins i la variable sencera fa referència a la qualitat del vi obtinguda amb la mitjana d'almenys 3 experts en vins amb una escala de 0 a 10 on 0 és molt dolent i 10 és molt excel·lent.
+(font: (**[https://archive.ics.uci.edu/ml/datasets/wine+quality](https://archive.ics.uci.edu/ml/datasets/wine+quality)**)).
+
+
+# **Context del dataset**
+
+Aquest fitxer de dades ens serveix per saber si un vi és bo o no. Per això disposem d'una variable, `quality`, que fa referència a la qualitat del vi en una escala de 0 a 10 proporcionada per experts en el món del vi. Tractarem de trobar un model que ens indiqui en funció de les variables de característiques químiques si un vi es pot considerar bo o no.
+
+\newpage
+
+# **Càlcul dels estadístics bàsics**
+
+
+```{r}
+
+summary(df)
+
+```
+
+\newpage
+
+# **Tractament dels valors perduts**
+
+```{r}
+
+for (i in ls(df)){
+  cat("Valors missing per",i,":",round((sum(is.na(df[,i]))/files)*100,2),"%\n")
+}
+
+```
+
+Com podem veure aquest fitxer no presenta cap valor perdut així que podrem utilitzar el fitxer sense necessitat d'imputar cap valor o eliminar observacions.
+
+
+\newpage
+
+# **Tractament dels valors extrems**
+
+Què és un valor extrem? Es considera un valor extrem aquell valor que es troba allunyat 3 desviacions estàndard de la mitjana. Per poder detectar aquests valors extrems utilitzem el gràfic `boxplot` que ens indica amb un cercle aquells valors que compleixen aquesta condició. Però realment es pot considerar a aquests valors extrems? Doncs depèn de com sigui la seva distribució a la variable. Podem tenir una variable que té un rang entre el valor màxim i el mínim molt gran, però que tots els valors presenten una distribució molt uniforme.
+Entre tots aquests valors considerats extrems podem considerar verdaderament extrems aquells que s'allunyen de la distribució dels valors. Per exemple si tenim de valors extrems 8,9,10,25 podem considerar un valor extrem pur el 25, ja que s'allunya molt de la distribució i no considerar com a valors extrems el 8,9,10.
+
+Tenint això en compte, amen a veure les variables del fitxer.
+
+
+```{r}
+ 
+layout_matrix_1 <- matrix(1:4, ncol = 2)  
+layout(layout_matrix_1)
+
+par(bty='n')
+fa.bp <- boxplot(df$fixed.acidity,xaxt='n',col="grey", border = "brown")
+title("fixed.acidity", cex.main=1, col.main="brown")
+va.bp <- boxplot(df$volatile.acidity,xaxt='n',col="grey", border = "brown")
+title("volatile.acidity", cex.main=1, col.main="brown")
+ca.bp <- boxplot(df$citric.acid,xaxt='n',col="grey", border = "brown")
+title("citric.acid", cex.main=1, col.main="brown")
+rs.bp <- boxplot(df$residual.sugar,xaxt='n',col="grey", border = "brown")
+title("residual.sugar", cex.main=1, col.main="brown")
+
+
+cat("\nVariable fixed.acidity\n\n")
+str(fa.bp$out)
+sort(fa.bp$out)
+
+cat("\nVariable volatile.acidity\n\n")
+str(va.bp$out)
+sort(va.bp$out)
+
+cat("\nVariable citric.acid\n\n")
+str(ca.bp$out)
+sort(ca.bp$out)
+table(df$citric.acid)
+
+cat("\nVariable residual.sugar\n\n")
+str(rs.bp$out)
+sort(rs.bp$out)
+
+
+``` 
+
+En aquest set de quatre variables, veient el boxplot i els valors que dona com a valors extrems podem dir que:
+
+- Variable fixed.acidity no presenta valors extrems
+- Variable volatile.acidity presenta 1 valor extrem (1.580)
+- Variable citric.acid presenta 1 valor extrem (1) Aquesta variable només presenta un valor extrem, en veure la freqüència de la variable veiem que passem de 0.79 a 1. És un salt molt gran i per això el considero valor extrem.
+- Variable residual.sugar presenta 11 valors extrems (valors majors de 9.0)
+
+
+\newpage
+
+```{r}
+
+layout_matrix_1 <- matrix(1:4, ncol = 2)  
+layout(layout_matrix_1)
+
+par(bty='n')
+ch.bp <- boxplot(df$chlorides,xaxt='n',col="grey", border = "brown")
+title("chlorides", cex.main=1, col.main="brown")
+fsd.bp <- boxplot(df$free.sulfur.dioxide,xaxt='n',col="grey", border = "brown")
+title("free.sulfur.dioxide", cex.main=1, col.main="brown")
+tsd.bp <- boxplot(df$total.sulfur.dioxide,xaxt='n',col="grey", border = "brown")
+title("total.sulfur.dioxide", cex.main=1, col.main="brown")
+den.bp <- boxplot(df$density,xaxt='n',col="grey", border = "brown")
+title("density", cex.main=1, col.main="brown")
+
+cat("\nVariable chlorides\n\n")
+str(ch.bp$out)
+sort(ch.bp$out)
+
+cat("\nVariable free.sulfur.dioxide\n\n")
+str(fsd.bp$out)
+sort(fsd.bp$out)
+
+cat("\nVariable total.sulfur.dioxide\n\n")
+str(tsd.bp$out)
+sort(tsd.bp$out)
+
+cat("\nVariable density\n\n")
+str(den.bp$out)
+sort(den.bp$out)
+
+```
+
+En aquest set de quatre variables, veient el boxplot i els valors que dona com a valors extrems podem dir que:
+
+- Variable chlorides presenta 9 valors extrems per abaix (<0.04) i 22 valors extrems per dalt (>0.3)
+- Variable free.sulfur.dioxide presenta 4 valors extrems (66,68,68,72)
+- Variable total.sulfur.dioxide presenta 4 valors extrems (160,165,278,289)
+- Variable density no presenta valors extrems
+
+\newpage
+
+```{r}
+
+layout_matrix_1 <- matrix(1:4, ncol = 2)  
+layout(layout_matrix_1)
+
+par(bty='n')
+ph.bp <- boxplot(df$pH,xaxt='n',col="grey", border = "brown")
+title("pH", cex.main=1, col.main="brown")
+sul.bp <- boxplot(df$sulphates,xaxt='n',col="grey", border = "brown")
+title("sulphates", cex.main=1, col.main="brown")
+alc.bp <- boxplot(df$alcohol,xaxt='n',col="grey", border = "brown")
+title("alcohol", cex.main=1, col.main="brown")
+qua.bp <- boxplot(df$quality,xaxt='n',col="grey", border = "brown")
+title("quality", cex.main=1, col.main="brown")
+
+cat("\nVariable pH\n\n")
+str(ph.bp$out)
+sort(ph.bp$out)
+
+cat("\nVariable sulphates\n\n")
+str(sul.bp$out)
+sort(sul.bp$out)
+
+cat("\nVariable alcohol\n\n")
+str(alc.bp$out)
+sort(alc.bp$out)
+
+cat("\nVariable quality\n\n")
+str(qua.bp$out)
+sort(qua.bp$out)
+table(df$quality)
+
+
+```
+
+En aquest set de quatre variables, veient el boxplot i els valors que dona com a valors extrems podem dir que:
+
+- Variable pH presenta no presenta valors extrems
+- Variable sulphates presenta 8 valors extrems (valors més grans de 1.36)
+- Variable alcohol no presenta valors extrems
+- Variable quality no presenta valors extrems. Aquesta variable només presenta 6 codis i és cert que del 3 i del 8 hi ha poca mostra però no els consideraria valors extrems.
+
+\newpage
+
+Un cop tenim localitzats els valors extrems de les variables, els passarem a missing i imputarem la mitjana de la variable.
+Farem un set de variables nou per tal de no embolicar-nos amb les variables a l'hora de fer anàlisis.
+
+
+```{r}
+
+df2<-read.csv("winequality-red_inicials.csv",header=T,sep=",", dec=".")
+
+df2$volatile.acidity[df2$volatile.acidity > 1.57] <- NA
+df2$citric.acid[df2$citric.acid == 1] <- NA
+df2$residual.sugar[df2$residual.sugar > 9] <- NA
+df2$chlorides[df2$chlorides > 0.3] <- NA
+df2$chlorides[df2$chlorides < 0.04] <- NA
+df2$free.sulfur.dioxide[df2$free.sulfur.dioxide > 65] <- NA
+df2$total.sulfur.dioxide[df2$total.sulfur.dioxide > 159] <- NA
+df2$sulphates[df2$sulphates > 1.36] <- NA
+
+for (i in ls(df2)){
+  cat("Valors missing per",i,":",round((sum(is.na(df2[,i]))/files)*100,2),"%\n")
+}
+
+```
+
+Un cop hem eliminat els valors extrems veiem que hi ha molt pocs. Ara els imputarem la mitjana de la variable per tal de no tenir valors perduts.
+
+```{r}
+
+mchlorides <- mean(df2$chlorides, na.rm = T)
+mcitric <- mean(df2$citric.acid, na.rm = T)
+mfree <- mean(df2$free.sulfur.dioxide, na.rm = T)
+mresidual <- mean(df2$residual.sugar, na.rm = T)
+msulphates <- mean(df2$sulphates, na.rm = T)
+mtotal <- mean(df2$total.sulfur.dioxide, na.rm = T)
+mvolatile <- mean(df2$volatile.acidity, na.rm = T)
+
+df2$chlorides <- ifelse(is.na(df2$chlorides),mchlorides,df2$chlorides)
+df2$citric.acid <- ifelse(is.na(df2$citric.acid),mcitric,df2$citric.acid)
+df2$free.sulfur.dioxide <- ifelse(is.na(df2$free.sulfur.dioxide),mfree,df2$free.sulfur.dioxide)
+df2$residual.sugar <- ifelse(is.na(df2$residual.sugar),mresidual,df2$residual.sugar)
+df2$sulphates <- ifelse(is.na(df2$sulphates),msulphates,df2$sulphates)
+df2$total.sulfur.dioxide <- ifelse(is.na(df2$total.sulfur.dioxide),mtotal,df2$total.sulfur.dioxide)
+df2$volatile.acidity <- ifelse(is.na(df2$volatile.acidity),mvolatile,df2$volatile.acidity)
+
+for (i in ls(df2)){
+  cat("Valors missing per",i,":",round((sum(is.na(df2[,i]))/files)*100,2),"%\n")
+}
+
+```
+
+Després de fer la imputació disposem d'un fitxer sense els valors extrems considerats.
+
+\newpage
+
+# **Variable qualitat del vi**
+
+Per tal de poder saber si un vi és bo o no recodificarem la variable `quality` en dos talls. Aquesta variable tot i només tenir valors del 3 al 8 està mesurada en una escala de 0 a 10. Això és un tema una mica subjectiu, però per tema de mostra podem dir que un vi serà bo quan tingui una qualitat superior a 7.
+
+```{r}
+
+cat("Variable quality\n")
+
+table(df2$quality)
+
+df2["qualityr"] <- NULL
+df2["qualityr"] <- cut(df2$quality, breaks = c(-1,6,10), labels = c("No Vi Bo", "Vi Bo"))
+
+cat("\nComprovació creació variable\n")
+table(df2$qualityr,df2$quality)
+
+cat("\n")
+str(df2)
+  
+``` 
+
+
+\newpage
+
+# **Comprovació de la normalitat**
+
+Ara que tenim un fitxer de dades net, comprovarem la normalitat de les variables. 
+
+Per comprovar la normalitat de les variables podem utilitzar el test de Shapiro-Wilk. 
+Per aquest test s'assumeix com a hipòtesi nul·la que la distribució és normal, llavors si el p-valor del contrast és inferior al nivell de significació situat en 0.05, rebutjarem la hipòtesi nul·la i tindrem que no segueixen una distribució normal.
+
+Una altra manera més visual de veure si una variable segueix una distribució normal és amb els gràfics qqnorm (compara els quantils mostrals amb els teòrics) i l'histograma.
+
+
+```{r}
+
+layout_matrix_1 <- matrix(1:6, ncol = 2)  
+layout(layout_matrix_1)
+
+par(bty='n')
+qqnorm(df2$fixed.acidity, main = "", xlab = "Quantils teòrics", ylab = "Quantils mostrals")
+qqline(df2$fixed.acidity)
+title("Variable fixed.acidity", cex.main=1, col.main="brown")
+
+par(bty='n')
+qqnorm(df2$volatile.acidity, main = "", xlab = "Quantils teòrics", ylab = "Quantils mostrals")
+qqline(df2$volatile.acidity)
+title("Variable volatile.acidity", cex.main=1, col.main="brown")
+
+par(bty='n')
+qqnorm(df2$citric.acid, main = "", xlab = "Quantils teòrics", ylab = "Quantils mostrals")
+qqline(df2$citric.acid)
+title("Variable citric.acid", cex.main=1, col.main="brown")
+
+hist(df2$fixed.acidity, probability = TRUE, main = "", xlab = "fixed.acidity", ylab = "Freqüència")
+x   <- seq(min(df2$fixed.acidity), max(df2$fixed.acidity), length = 1000)
+y <- dnorm(x, mean(df2$fixed.acidity), sd(df2$fixed.acidity))
+lines(x, y, col = "blue")
+
+hist(df2$volatile.acidity, probability = TRUE, main = "", xlab = "volatile.acidity", ylab = "Freqüència")
+x   <- seq(min(df2$volatile.acidity), max(df2$volatile.acidity), length = 1000)
+y <- dnorm(x, mean(df2$volatile.acidity), sd(df2$volatile.acidity))
+lines(x, y, col = "blue")
+
+hist(df2$citric.acid, probability = TRUE, main = "", xlab = "citric.acid", ylab = "Freqüència")
+x   <- seq(min(df2$citric.acid), max(df2$citric.acid), length = 1000)
+y <- dnorm(x, mean(df2$citric.acid), sd(df2$citric.acid))
+lines(x, y, col = "blue")
+
+
+layout_matrix_1 <- matrix(1:6, ncol = 2)  
+layout(layout_matrix_1)
+
+par(bty='n')
+qqnorm(df2$residual.sugar, main = "", xlab = "Quantils teòrics", ylab = "Quantils mostrals")
+qqline(df2$residual.sugar)
+title("Variable residual.sugar", cex.main=1, col.main="brown")
+
+par(bty='n')
+qqnorm(df2$chlorides, main = "", xlab = "Quantils teòrics", ylab = "Quantils mostrals")
+qqline(df2$chlorides)
+title("Variable chlorides", cex.main=1, col.main="brown")
+
+par(bty='n')
+qqnorm(df2$free.sulfur.dioxide, main = "", xlab = "Quantils teòrics", ylab = "Quantils mostrals")
+qqline(df2$free.sulfur.dioxide)
+title("Variable free.sulfur.dioxide", cex.main=1, col.main="brown")
+
+hist(df2$residual.sugar, probability = TRUE, main = "", xlab = "residual.sugar", ylab = "Freqüència")
+x   <- seq(min(df2$residual.sugar), max(df2$residual.sugar), length = 1000)
+y <- dnorm(x, mean(df2$residual.sugar), sd(df2$residual.sugar))
+lines(x, y, col = "blue")
+
+hist(df2$chlorides, probability = TRUE, main = "", xlab = "chlorides", ylab = "Freqüència")
+x   <- seq(min(df2$chlorides), max(df2$chlorides), length = 1000)
+y <- dnorm(x, mean(df2$chlorides), sd(df2$chlorides))
+lines(x, y, col = "blue")
+
+hist(df2$free.sulfur.dioxide, probability = TRUE, main = "", xlab = "free.sulfur.dioxide", ylab = "Freqüència")
+x   <- seq(min(df2$free.sulfur.dioxide), max(df2$free.sulfur.dioxide), length = 1000)
+y <- dnorm(x, mean(df2$free.sulfur.dioxide), sd(df2$free.sulfur.dioxide))
+lines(x, y, col = "blue")
+
+
+layout_matrix_1 <- matrix(1:6, ncol = 2)  
+layout(layout_matrix_1)
+
+par(bty='n')
+qqnorm(df2$total.sulfur.dioxide, main = "", xlab = "Quantils teòrics", ylab = "Quantils mostrals")
+qqline(df2$total.sulfur.dioxide)
+title("Variable total.sulfur.dioxide", cex.main=1, col.main="brown")
+
+par(bty='n')
+qqnorm(df2$density, main = "", xlab = "Quantils teòrics", ylab = "Quantils mostrals")
+qqline(df2$density)
+title("Variable density", cex.main=1, col.main="brown")
+
+par(bty='n')
+qqnorm(df2$pH, main = "", xlab = "Quantils teòrics", ylab = "Quantils mostrals")
+qqline(df2$pH)
+title("Variable pH", cex.main=1, col.main="brown")
+
+hist(df2$total.sulfur.dioxide, probability = TRUE, main = "", xlab = "total.sulfur.dioxide", ylab = "Freqüència")
+x   <- seq(min(df2$total.sulfur.dioxide), max(df2$total.sulfur.dioxide), length = 1000)
+y <- dnorm(x, mean(df2$total.sulfur.dioxide), sd(df2$total.sulfur.dioxide))
+lines(x, y, col = "blue")
+
+hist(df2$density, probability = TRUE, main = "", xlab = "density", ylab = "Freqüència")
+x   <- seq(min(df2$density), max(df2$density), length = 1000)
+y <- dnorm(x, mean(df2$density), sd(df2$density))
+lines(x, y, col = "blue")
+
+hist(df2$pH, probability = TRUE, main = "", xlab = "pH", ylab = "Freqüència")
+x   <- seq(min(df2$pH), max(df2$pH), length = 1000)
+y <- dnorm(x, mean(df2$pH), sd(df2$pH))
+lines(x, y, col = "blue")
+
+layout_matrix_1 <- matrix(1:4, ncol = 2)  
+layout(layout_matrix_1)
+
+par(bty='n')
+qqnorm(df2$sulphates, main = "", xlab = "Quantils teòrics", ylab = "Quantils mostrals")
+qqline(df2$sulphates)
+title("Variable sulphates", cex.main=1, col.main="brown")
+
+par(bty='n')
+qqnorm(df2$alcohol, main = "", xlab = "Quantils teòrics", ylab = "Quantils mostrals")
+qqline(df2$alcohol)
+title("Variable alcohol", cex.main=1, col.main="brown")
+
+hist(df2$sulphates, probability = TRUE, main = "", xlab = "sulphates", ylab = "Freqüència")
+x   <- seq(min(df2$sulphates), max(df2$sulphates), length = 1000)
+y <- dnorm(x, mean(df2$sulphates), sd(df2$sulphates))
+lines(x, y, col = "blue")
+
+hist(df2$alcohol, probability = TRUE, main = "", xlab = "alcohol", ylab = "Freqüència")
+x   <- seq(min(df2$alcohol), max(df2$alcohol), length = 1000)
+y <- dnorm(x, mean(df2$alcohol), sd(df2$alcohol))
+lines(x, y, col = "blue")
+
+noms <- c("fixed.acidity","volatile.acidity","citric.acid","residual.sugar","chlorides","free.sulfur.dioxide","total.sulfur.dioxide","density","pH","sulphates","alcohol")
+
+p_values <- NULL
+
+cat("Test per comprovar la normalitat de les variables\n\n")
+
+for (i in noms){
+  pv <- shapiro.test(df2[,i])$p.value
+  p_values <- c(p_values, pv)
+  cat("p-value del Shapiro-Wilk Test per",i,":",pv, "\n")  
+}
+
+
+```
+
+Donant un cop d'ull als gràfics podem veure que hi ha variables que poden semblar que segueixen una distribució normal, ja que en el gràfic qqnorm sembla que les dades s'ajusten a la recta de referència i l'histograma sembla una campana com per exemple `volatile.acidity`, `density` o `pH`.
+Quan el resultat del test de Shapiro-Wilk podem veure que tots els p-valors son inferiors al nivell de significació que està situat en 0.05. Això vol dir que hem de rebutjar la hipòtesi nul·la i, per tant, arribar a la conclusió que les variables no segueixen una distribució normal.
+
+De totes maneres com tenim una mostra prou gran (n = `r files`) pel teorema central del límit podem considerar que les dades del fitxer segueixen una distribució normal. 
+
+
+\newpage
+
+# **Comprovació de la homogeneïtat de la variància**
+
+L'homogeneïtat de la variància consisteix a veure si hi ha igualtat de variàncies entre grups de dades. Com tenim la variable 'quality' en dos grups mirarem això entre aquests dos grups, ja que aquesta variable és la que utilitzarem per fer els models estadístics. Com les variables no segueixen una distribució normal farem servir el test de Fligner-Killeen on la hipòtesi nul·la indica igualtat de variàncies.
+
+```{r}
+
+variables <- c("fixed.acidity","volatile.acidity","citric.acid","residual.sugar","chlorides","free.sulfur.dioxide","total.sulfur.dioxide","density","pH","sulphates","alcohol")
+
+p_values <- NULL
+
+cat("Test per comprovar l'homogeneïtat de la variància de les variables enfront qualityr\n\n")
+
+for (i in variables){
+  pv <- fligner.test(df2[,i]~df2$qualityr)$p.value
+  p_values <- c(p_values, pv)
+  cat("p-value del Fligner-Killen Test per",i,":",pv, "\n")  
+}
+
+```
+
+Mirant els resultats del test de Fligner-Killen podem veure que les variables amb un p-valor inferior al nivell de significació (0.05) rebutgen la hipòtesi nul·la i, per tant, presenten variàncies estadísticament diferents per als diferents grups de la variable `qualityr`. Aquestes variables són `fixed.acidity`, `volatile.acidity`, `residual.sugar`, `chlorides`, `free.sulfur.dioxide`, `total.sulfur.dioxide` i `density`. Per contra les variables `citric.acid`, `pH`, `sulphates` i `alcohol` presenten un p-valor superior al nivell de significació i, per tant, estadísticament les variàncies són iguals.
+
+\newpage
+
+# **Contrast d'hipòtesi**
+
+Com volem saber si un vi es considerat bo o no, podem analitzar les variables en funció de la qualitat per veure si aquestes influeixen a l'hora de sapiguer si un vi es bo o no. 
+Per fer això utilitzarem un contrast d'hipòtesi on volem veure si hi ha diferencies en funció de la variable qualityr (Vi bo, No vi bo). Aquest contrast tindrà una hipòtesi nul·la on la mitjana de la variable és igual en funció de qualityr.
+
+
+## **Test del contrat d'hipòtesi Mann-Whitney-Wilcoxon**
+
+Per a aquestes variables utilitzen el test de `Mann-Whitney-Wilcoxon`, ja que hem vist abans que les variàncies són estadísticament diferents.
+Primer veurem aquestes variables gràficament i després aplicarem el test.
+
+### **Variable fixed.acidity**
+
+```{r}
+
+g1<-ggplot(df2[df2$qualityr=="No Vi Bo",], 
+           aes(x = qualityr, y = fixed.acidity, color = qualityr)) + geom_boxplot() +scale_color_manual(values =c("gray50"))+ coord_flip()+  
+           labs(y=element_blank(),x=element_blank())+ theme(axis.line.x =element_blank(),axis.line.y =element_blank(),
+           axis.text.x=element_blank(),axis.text.y=element_blank(), axis.ticks.x=element_blank(),axis.ticks.y=element_blank(),
+           legend.position="none",panel.background =element_blank()) 
+
+g2<-ggplot(df2, aes(x = fixed.acidity, fill = qualityr)) + 
+    geom_density(alpha =0.5) + scale_fill_manual(values =c("gray50", "orangered2")) + 
+    theme(axis.line.x =element_line(size =.2), axis.line.y =element_line(size =.2), panel.background =element_blank()) 
+
+
+g3<-ggplot(df2[df2$qualityr=="Vi Bo",], 
+           aes(x = qualityr, y = fixed.acidity, color = qualityr)) + geom_boxplot() +scale_color_manual(values =c("orangered2"))+
+           coord_flip()+labs(y=element_blank(),x=element_blank())+ theme(axis.line.x =element_blank(),axis.line.y =element_blank(),
+           axis.text.x=element_blank(),axis.text.y=element_blank(), axis.ticks.x=element_blank(),axis.ticks.y=element_blank(),
+           legend.position="none",panel.background =element_blank())
+
+
+(g1/g2/g3)+plot_layout(heights=c(1, 5, 1))+plot_annotation(title ="Density plot of fixed.acidity by qualityr")
+
+```
+
+
+Gràficament, podem veure que les mitjanes de la variable són semblants, però hi ha concentració de valors baixos quant el vi no és bo. Per tant, es pot afirmar que la mitjana entre el vi bo és més gran que entre el vi no bo?
+
+$$H_{0}:\mu_{bo}-\mu_{no\:bo}=0$$
+
+$$H_{0}:\mu_{bo}-\mu_{no\:bo}>0$$
+
+
+```{r}
+
+wilcox.test(x = df2$fixed.acidity[df2$qualityr=="Vi Bo"], y = df2$fixed.acidity[df2$qualityr=="No Vi Bo"], alternative ="greater")
+
+```
+
+Com el p-value és inferior al nivell de significació (0.05) hem de rebutjar la hipòtesi nul·la d'igualtat i concloure que el Vi bo té un nivell de fixed.acidity més alt que el vi no bo.
+
+\newpage
+
+### **Variable volatile.acidity**
+
+```{r}
+
+g1<-ggplot(df2[df2$qualityr=="No Vi Bo",], 
+           aes(x = qualityr, y = volatile.acidity, color = qualityr)) + geom_boxplot() +scale_color_manual(values =c("gray50"))+ coord_flip()+  
+           labs(y=element_blank(),x=element_blank())+ theme(axis.line.x =element_blank(),axis.line.y =element_blank(),
+           axis.text.x=element_blank(),axis.text.y=element_blank(), axis.ticks.x=element_blank(),axis.ticks.y=element_blank(),
+           legend.position="none",panel.background =element_blank()) 
+
+g2<-ggplot(df2, aes(x = volatile.acidity, fill = qualityr)) + 
+    geom_density(alpha =0.5) + scale_fill_manual(values =c("gray50", "orangered2")) + 
+    theme(axis.line.x =element_line(size =.2), axis.line.y =element_line(size =.2), panel.background =element_blank()) 
+
+
+g3<-ggplot(df2[df2$qualityr=="Vi Bo",], 
+           aes(x = qualityr, y = volatile.acidity, color = qualityr)) + geom_boxplot() +scale_color_manual(values =c("orangered2"))+
+           coord_flip()+labs(y=element_blank(),x=element_blank())+ theme(axis.line.x =element_blank(),axis.line.y =element_blank(),
+           axis.text.x=element_blank(),axis.text.y=element_blank(), axis.ticks.x=element_blank(),axis.ticks.y=element_blank(),
+           legend.position="none",panel.background =element_blank())
+
+
+(g1/g2/g3)+plot_layout(heights=c(1, 5, 1))+plot_annotation(title ="Density plot of volatile.acidity by qualityr")
+
+```
+
+
+Gràficament, podem veure que les mitjanes de la variable són semblants, però hi ha concentració de valors baixos quant el vi és bo. Per tant, es pot afirmar que la mitjana entre el vi bo és més petita que entre el vi no bo?
+
+$$H_{0}:\mu_{bo}-\mu_{no\:bo}=0$$
+
+$$H_{0}:\mu_{bo}-\mu_{no\:bo}<0$$
+
+
+```{r}
+
+wilcox.test(x = df2$volatile.acidity[df2$qualityr=="Vi Bo"], y = df2$volatile.acidity[df2$qualityr=="No Vi Bo"], alternative ="less")
+
+```
+
+Com el p-value és inferior al nivell de significació (0.05) hem de rebutjar la hipòtesi nul·la d'igualtat i concloure que el Vi bo té un nivell de volatile.acidity més baix que el vi no bo.
+
+\newpage
+
+### **Variable residual.sugar**
+
+```{r}
+
+g1<-ggplot(df2[df2$qualityr=="No Vi Bo",], 
+           aes(x = qualityr, y = residual.sugar, color = qualityr)) + geom_boxplot() +scale_color_manual(values =c("gray50"))+ coord_flip()+  
+           labs(y=element_blank(),x=element_blank())+ theme(axis.line.x =element_blank(),axis.line.y =element_blank(),
+           axis.text.x=element_blank(),axis.text.y=element_blank(), axis.ticks.x=element_blank(),axis.ticks.y=element_blank(),
+           legend.position="none",panel.background =element_blank()) 
+
+g2<-ggplot(df2, aes(x = residual.sugar, fill = qualityr)) + 
+    geom_density(alpha =0.5) + scale_fill_manual(values =c("gray50", "orangered2")) + 
+    theme(axis.line.x =element_line(size =.2), axis.line.y =element_line(size =.2), panel.background =element_blank()) 
+
+
+g3<-ggplot(df2[df2$qualityr=="Vi Bo",], 
+           aes(x = qualityr, y = residual.sugar, color = qualityr)) + geom_boxplot() +scale_color_manual(values =c("orangered2"))+
+           coord_flip()+labs(y=element_blank(),x=element_blank())+ theme(axis.line.x =element_blank(),axis.line.y =element_blank(),
+           axis.text.x=element_blank(),axis.text.y=element_blank(), axis.ticks.x=element_blank(),axis.ticks.y=element_blank(),
+           legend.position="none",panel.background =element_blank())
+
+
+(g1/g2/g3)+plot_layout(heights=c(1, 5, 1))+plot_annotation(title ="Density plot of residual.sugar by qualityr")
+
+```
+
+
+Gràficament, podem veure que les mitjanes de la variable són semblants i la distribució de la variable també.
+
+$$H_{0}:\mu_{bo}-\mu_{no\:bo}=0$$
+
+$$H_{0}:\mu_{bo}-\mu_{no\:bo}<>0$$
+
+
+```{r}
+
+wilcox.test(x = df2$residual.sugar[df2$qualityr=="Vi Bo"], y = df2$residual.sugar[df2$qualityr=="No Vi Bo"])
+
+```
+
+Com el p-value és inferior al nivell de significació (0.05) hem de rebutjar la hipòtesi nul·la d'igualtat i concloure que les mitjanes de residual.sugar són diferents per a cada tipus de vi.
+
+\newpage
+
+### **Variable free.sulfur.dioxide**
+
+```{r}
+
+g1<-ggplot(df2[df2$qualityr=="No Vi Bo",], 
+           aes(x = qualityr, y = free.sulfur.dioxide, color = qualityr)) + geom_boxplot() +scale_color_manual(values =c("gray50"))+ coord_flip()+  
+           labs(y=element_blank(),x=element_blank())+ theme(axis.line.x =element_blank(),axis.line.y =element_blank(),
+           axis.text.x=element_blank(),axis.text.y=element_blank(), axis.ticks.x=element_blank(),axis.ticks.y=element_blank(),
+           legend.position="none",panel.background =element_blank()) 
+
+g2<-ggplot(df2, aes(x = free.sulfur.dioxide, fill = qualityr)) + 
+    geom_density(alpha =0.5) + scale_fill_manual(values =c("gray50", "orangered2")) + 
+    theme(axis.line.x =element_line(size =.2), axis.line.y =element_line(size =.2), panel.background =element_blank()) 
+
+
+g3<-ggplot(df2[df2$qualityr=="Vi Bo",], 
+           aes(x = qualityr, y = free.sulfur.dioxide, color = qualityr)) + geom_boxplot() +scale_color_manual(values =c("orangered2"))+
+           coord_flip()+labs(y=element_blank(),x=element_blank())+ theme(axis.line.x =element_blank(),axis.line.y =element_blank(),
+           axis.text.x=element_blank(),axis.text.y=element_blank(), axis.ticks.x=element_blank(),axis.ticks.y=element_blank(),
+           legend.position="none",panel.background =element_blank())
+
+
+(g1/g2/g3)+plot_layout(heights=c(1, 5, 1))+plot_annotation(title ="Density plot of free.sulfur.dioxide by qualityr")
+
+```
+
+Gràficament, podem veure que la distribució de la variable es semblant però s'aprecia que a valors mes petits el Vi és considerat bo. Per tant, es pot afirmar que la mitjana entre el vi bo és més petita que entre el vi no bo?
+
+$$H_{0}:\mu_{bo}-\mu_{no\:bo}=0$$
+
+$$H_{0}:\mu_{bo}-\mu_{no\:bo}<0$$
+
+
+```{r}
+
+wilcox.test(x = df2$free.sulfur.dioxide[df2$qualityr=="Vi Bo"], y = df2$free.sulfur.dioxide[df2$qualityr=="No Vi Bo"], alternative ="less")
+
+```
+
+Com el p-value és inferior al nivell de significació (0.05) hem de rebutjar la hipòtesi nul·la d'igualtat i concloure que a menor valor de free.sulfur.dioxide el vi és considerat bo.
+
+\newpage
+
+### **Variable total.sulfur.dioxide**
+
+```{r}
+
+g1<-ggplot(df2[df2$qualityr=="No Vi Bo",], 
+           aes(x = qualityr, y = total.sulfur.dioxide, color = qualityr)) + geom_boxplot() +scale_color_manual(values =c("gray50"))+ coord_flip()+  
+           labs(y=element_blank(),x=element_blank())+ theme(axis.line.x =element_blank(),axis.line.y =element_blank(),
+           axis.text.x=element_blank(),axis.text.y=element_blank(), axis.ticks.x=element_blank(),axis.ticks.y=element_blank(),
+           legend.position="none",panel.background =element_blank()) 
+
+g2<-ggplot(df2, aes(x = total.sulfur.dioxide, fill = qualityr)) + 
+    geom_density(alpha =0.5) + scale_fill_manual(values =c("gray50", "orangered2")) + 
+    theme(axis.line.x =element_line(size =.2), axis.line.y =element_line(size =.2), panel.background =element_blank()) 
+
+
+g3<-ggplot(df2[df2$qualityr=="Vi Bo",], 
+           aes(x = qualityr, y = total.sulfur.dioxide, color = qualityr)) + geom_boxplot() +scale_color_manual(values =c("orangered2"))+
+           coord_flip()+labs(y=element_blank(),x=element_blank())+ theme(axis.line.x =element_blank(),axis.line.y =element_blank(),
+           axis.text.x=element_blank(),axis.text.y=element_blank(), axis.ticks.x=element_blank(),axis.ticks.y=element_blank(),
+           legend.position="none",panel.background =element_blank())
+
+
+(g1/g2/g3)+plot_layout(heights=c(1, 5, 1))+plot_annotation(title ="Density plot of total.sulfur.dioxide by qualityr")
+
+```
+
+Gràficament, podem veure que la distribució de la variable es semblant però s'aprecia que a valors mes petits el Vi és considerat bo. Per tant, es pot afirmar que la mitjana entre el vi bo és més petita que entre el vi no bo?
+
+$$H_{0}:\mu_{bo}-\mu_{no\:bo}=0$$
+
+$$H_{0}:\mu_{bo}-\mu_{no\:bo}<0$$
+
+
+```{r}
+
+wilcox.test(x = df2$total.sulfur.dioxide[df2$qualityr=="Vi Bo"], y = df2$total.sulfur.dioxide[df2$qualityr=="No Vi Bo"], alternative ="less")
+
+```
+
+Com el p-value és inferior al nivell de significació (0.05) hem de rebutjar la hipòtesi nul·la d'igualtat i concloure que a menor valor de total.sulfur.dioxide el vi és considerat bo.
+
+\newpage
+
+### **Variable density**
+
+```{r}
+
+g1<-ggplot(df2[df2$qualityr=="No Vi Bo",], 
+           aes(x = qualityr, y = density, color = qualityr)) + geom_boxplot() +scale_color_manual(values =c("gray50"))+ coord_flip()+  
+           labs(y=element_blank(),x=element_blank())+ theme(axis.line.x =element_blank(),axis.line.y =element_blank(),
+           axis.text.x=element_blank(),axis.text.y=element_blank(), axis.ticks.x=element_blank(),axis.ticks.y=element_blank(),
+           legend.position="none",panel.background =element_blank()) 
+
+g2<-ggplot(df2, aes(x = density, fill = qualityr)) + 
+    geom_density(alpha =0.5) + scale_fill_manual(values =c("gray50", "orangered2")) + 
+    theme(axis.line.x =element_line(size =.2), axis.line.y =element_line(size =.2), panel.background =element_blank()) 
+
+
+g3<-ggplot(df2[df2$qualityr=="Vi Bo",], 
+           aes(x = qualityr, y = density, color = qualityr)) + geom_boxplot() +scale_color_manual(values =c("orangered2"))+
+           coord_flip()+labs(y=element_blank(),x=element_blank())+ theme(axis.line.x =element_blank(),axis.line.y =element_blank(),
+           axis.text.x=element_blank(),axis.text.y=element_blank(), axis.ticks.x=element_blank(),axis.ticks.y=element_blank(),
+           legend.position="none",panel.background =element_blank())
+
+
+(g1/g2/g3)+plot_layout(heights=c(1, 5, 1))+plot_annotation(title ="Density plot of density by qualityr")
+
+```
+
+Gràficament, podem veure que la distribució de la variable es semblant però s'aprecia que a valors mes petits el Vi és considerat bo. Per tant, es pot afirmar que la mitjana entre el vi bo és més petita que entre el vi no bo?
+
+$$H_{0}:\mu_{bo}-\mu_{no\:bo}=0$$
+
+$$H_{0}:\mu_{bo}-\mu_{no\:bo}<0$$
+
+
+```{r}
+
+wilcox.test(x = df2$density[df2$qualityr=="Vi Bo"], y = df2$density[df2$qualityr=="No Vi Bo"], alternative ="less")
+
+```
+
+Com el p-value és inferior al nivell de significació (0.05) hem de rebutjar la hipòtesi nul·la d'igualtat i concloure que a menor valor de density el vi és considerat bo.
+
+\newpage
+
+## **Test del contrat d'hipòtesi t-Student**
+
+Per a aquestes variables utilitzem el test `t-Student`, ja que hem vist abans que les variàncies són estadísticament iguals. Tot i que hem vist que els variables no segueixen una distribució normal, pel teorema central del límit podem fer aquest supòsit. Per tant, amb distribució normal i variàncies iguals podem fer servir aquest test.
+
+Primer veurem aquestes variables gràficament i després aplicarem el test.
+
+### **Variable citric.acid**
+
+```{r}
+
+g1<-ggplot(df2[df2$qualityr=="No Vi Bo",], 
+           aes(x = qualityr, y = citric.acid, color = qualityr)) + geom_boxplot() +scale_color_manual(values =c("gray50"))+ coord_flip()+  
+           labs(y=element_blank(),x=element_blank())+ theme(axis.line.x =element_blank(),axis.line.y =element_blank(),
+           axis.text.x=element_blank(),axis.text.y=element_blank(), axis.ticks.x=element_blank(),axis.ticks.y=element_blank(),
+           legend.position="none",panel.background =element_blank()) 
+
+g2<-ggplot(df2, aes(x = citric.acid, fill = qualityr)) + 
+    geom_density(alpha =0.5) + scale_fill_manual(values =c("gray50", "orangered2")) + 
+    theme(axis.line.x =element_line(size =.2), axis.line.y =element_line(size =.2), panel.background =element_blank()) 
+
+
+g3<-ggplot(df2[df2$qualityr=="Vi Bo",], 
+           aes(x = qualityr, y = citric.acid, color = qualityr)) + geom_boxplot() +scale_color_manual(values =c("orangered2"))+
+           coord_flip()+labs(y=element_blank(),x=element_blank())+ theme(axis.line.x =element_blank(),axis.line.y =element_blank(),
+           axis.text.x=element_blank(),axis.text.y=element_blank(), axis.ticks.x=element_blank(),axis.ticks.y=element_blank(),
+           legend.position="none",panel.background =element_blank())
+
+
+(g1/g2/g3)+plot_layout(heights=c(1, 5, 1))+plot_annotation(title ="Density plot of citric.acid by qualityr")
+
+```
+
+Gràficament es pot veure que per valors mes alts el vi es considerat bo. Per tant, es pot afirmar que la mitjana entre el vi bo és més gran que entre el vi no bo?
+
+$$H_{0}:\mu_{bo}-\mu_{no\:bo}=0$$
+
+$$H_{0}:\mu_{bo}-\mu_{no\:bo}>0$$
+
+
+```{r}
+
+t.test(x = df2$citric.acid[df2$qualityr=="Vi Bo"], y = df2$citric.acid[df2$qualityr=="No Vi Bo"], alternative ="greater")
+
+```
+
+Com el p-value és inferior al nivell de significació (0.05) hem de rebutjar la hipòtesi nul·la d'igualtat i concloure que a major valor de citric.acid el vi és considerat bo.
+
+\newpage
+
+### **Variable chlorides**
+
+```{r}
+
+g1<-ggplot(df2[df2$qualityr=="No Vi Bo",], 
+           aes(x = qualityr, y = chlorides, color = qualityr)) + geom_boxplot() +scale_color_manual(values =c("gray50"))+ coord_flip()+  
+           labs(y=element_blank(),x=element_blank())+ theme(axis.line.x =element_blank(),axis.line.y =element_blank(),
+           axis.text.x=element_blank(),axis.text.y=element_blank(), axis.ticks.x=element_blank(),axis.ticks.y=element_blank(),
+           legend.position="none",panel.background =element_blank()) 
+
+g2<-ggplot(df2, aes(x = chlorides, fill = qualityr)) + 
+    geom_density(alpha =0.5) + scale_fill_manual(values =c("gray50", "orangered2")) + 
+    theme(axis.line.x =element_line(size =.2), axis.line.y =element_line(size =.2), panel.background =element_blank()) 
+
+
+g3<-ggplot(df2[df2$qualityr=="Vi Bo",], 
+           aes(x = qualityr, y = chlorides, color = qualityr)) + geom_boxplot() +scale_color_manual(values =c("orangered2"))+
+           coord_flip()+labs(y=element_blank(),x=element_blank())+ theme(axis.line.x =element_blank(),axis.line.y =element_blank(),
+           axis.text.x=element_blank(),axis.text.y=element_blank(), axis.ticks.x=element_blank(),axis.ticks.y=element_blank(),
+           legend.position="none",panel.background =element_blank())
+
+
+(g1/g2/g3)+plot_layout(heights=c(1, 5, 1))+plot_annotation(title ="Density plot of chlorides by qualityr")
+
+```
+
+Gràficament, podem veure que la distribució de la variable es semblant. Per tant, es pot afirmar que la mitjana entre el vi bo igual que entre el vi no bo?
+
+$$H_{0}:\mu_{bo}-\mu_{no\:bo}=0$$
+
+$$H_{0}:\mu_{bo}-\mu_{no\:bo}<>0$$
+
+
+```{r}
+
+t.test(x = df2$chlorides[df2$qualityr=="Vi Bo"], y = df2$chlorides[df2$qualityr=="No Vi Bo"])
+
+```
+
+Com el p-value és inferior al nivell de significació (0.05) hem de rebutjar la hipòtesi nul·la d'igualtat i concloure que les mitjanes de chlorides són diferents per grup.
+
+\newpage
+
+### **Variable pH**
+
+```{r}
+
+g1<-ggplot(df2[df2$qualityr=="No Vi Bo",], 
+           aes(x = qualityr, y = pH, color = qualityr)) + geom_boxplot() +scale_color_manual(values =c("gray50"))+ coord_flip()+  
+           labs(y=element_blank(),x=element_blank())+ theme(axis.line.x =element_blank(),axis.line.y =element_blank(),
+           axis.text.x=element_blank(),axis.text.y=element_blank(), axis.ticks.x=element_blank(),axis.ticks.y=element_blank(),
+           legend.position="none",panel.background =element_blank()) 
+
+g2<-ggplot(df2, aes(x = pH, fill = qualityr)) + 
+    geom_density(alpha =0.5) + scale_fill_manual(values =c("gray50", "orangered2")) + 
+    theme(axis.line.x =element_line(size =.2), axis.line.y =element_line(size =.2), panel.background =element_blank()) 
+
+
+g3<-ggplot(df2[df2$qualityr=="Vi Bo",], 
+           aes(x = qualityr, y = pH, color = qualityr)) + geom_boxplot() +scale_color_manual(values =c("orangered2"))+
+           coord_flip()+labs(y=element_blank(),x=element_blank())+ theme(axis.line.x =element_blank(),axis.line.y =element_blank(),
+           axis.text.x=element_blank(),axis.text.y=element_blank(), axis.ticks.x=element_blank(),axis.ticks.y=element_blank(),
+           legend.position="none",panel.background =element_blank())
+
+
+(g1/g2/g3)+plot_layout(heights=c(1, 5, 1))+plot_annotation(title ="Density plot of pH by qualityr")
+
+```
+
+Gràficament, podem veure que la distribució de la variable es semblant però es podria dir que amb un pH mes petit el vi es considerat bo. Per tant, es pot afirmar que la mitjana entre el vi bo és més petita que entre el vi no bo? 
+
+$$H_{0}:\mu_{bo}-\mu_{no\:bo}=0$$
+
+$$H_{0}:\mu_{bo}-\mu_{no\:bo}<0$$
+
+
+```{r}
+
+t.test(x = df2$pH[df2$qualityr=="Vi Bo"], y = df2$pH[df2$qualityr=="No Vi Bo"], alternative = "less")
+
+
+```
+
+Com el p-value és inferior al nivell de significació (0.05) hem de rebutjar la hipòtesi nul·la d'igualtat i concloure que a menor valor de pH es considera que el vi és bo.
+
+\newpage
+
+### **Variable sulphates**
+
+```{r}
+
+g1<-ggplot(df2[df2$qualityr=="No Vi Bo",], 
+           aes(x = qualityr, y = sulphates, color = qualityr)) + geom_boxplot() +scale_color_manual(values =c("gray50"))+ coord_flip()+  
+           labs(y=element_blank(),x=element_blank())+ theme(axis.line.x =element_blank(),axis.line.y =element_blank(),
+           axis.text.x=element_blank(),axis.text.y=element_blank(), axis.ticks.x=element_blank(),axis.ticks.y=element_blank(),
+           legend.position="none",panel.background =element_blank()) 
+
+g2<-ggplot(df2, aes(x = sulphates, fill = qualityr)) + 
+    geom_density(alpha =0.5) + scale_fill_manual(values =c("gray50", "orangered2")) + 
+    theme(axis.line.x =element_line(size =.2), axis.line.y =element_line(size =.2), panel.background =element_blank()) 
+
+
+g3<-ggplot(df2[df2$qualityr=="Vi Bo",], 
+           aes(x = qualityr, y = sulphates, color = qualityr)) + geom_boxplot() +scale_color_manual(values =c("orangered2"))+
+           coord_flip()+labs(y=element_blank(),x=element_blank())+ theme(axis.line.x =element_blank(),axis.line.y =element_blank(),
+           axis.text.x=element_blank(),axis.text.y=element_blank(), axis.ticks.x=element_blank(),axis.ticks.y=element_blank(),
+           legend.position="none",panel.background =element_blank())
+
+
+(g1/g2/g3)+plot_layout(heights=c(1, 5, 1))+plot_annotation(title ="Density plot of sulphates by qualityr")
+
+```
+
+Gràficament, podem veure que hi ha diferencies en la distribució de la variable, veient-se que a major valor de sulphates el vi és considerat bo. Per tant, es pot afirmar que la mitjana entre el vi bo és més gran que entre el vi no bo? 
+
+$$H_{0}:\mu_{bo}-\mu_{no\:bo}=0$$
+
+$$H_{0}:\mu_{bo}-\mu_{no\:bo}>0$$
+
+
+```{r}
+
+t.test(x = df2$sulphates[df2$qualityr=="Vi Bo"], y = df2$sulphates[df2$qualityr=="No Vi Bo"], alternative = "greater")
+
+
+```
+
+Com el p-value és inferior al nivell de significació (0.05) hem de rebutjar la hipòtesi nul·la d'igualtat i concloure que a major valor de sulphates es considera que el vi és bo.
+
+\newpage
+
+### **Variable alcohol**
+
+```{r}
+
+g1<-ggplot(df2[df2$qualityr=="No Vi Bo",], 
+           aes(x = qualityr, y = alcohol, color = qualityr)) + geom_boxplot() +scale_color_manual(values =c("gray50"))+ coord_flip()+  
+           labs(y=element_blank(),x=element_blank())+ theme(axis.line.x =element_blank(),axis.line.y =element_blank(),
+           axis.text.x=element_blank(),axis.text.y=element_blank(), axis.ticks.x=element_blank(),axis.ticks.y=element_blank(),
+           legend.position="none",panel.background =element_blank()) 
+
+g2<-ggplot(df2, aes(x = alcohol, fill = qualityr)) + 
+    geom_density(alpha =0.5) + scale_fill_manual(values =c("gray50", "orangered2")) + 
+    theme(axis.line.x =element_line(size =.2), axis.line.y =element_line(size =.2), panel.background =element_blank()) 
+
+
+g3<-ggplot(df2[df2$qualityr=="Vi Bo",], 
+           aes(x = qualityr, y = alcohol, color = qualityr)) + geom_boxplot() +scale_color_manual(values =c("orangered2"))+
+           coord_flip()+labs(y=element_blank(),x=element_blank())+ theme(axis.line.x =element_blank(),axis.line.y =element_blank(),
+           axis.text.x=element_blank(),axis.text.y=element_blank(), axis.ticks.x=element_blank(),axis.ticks.y=element_blank(),
+           legend.position="none",panel.background =element_blank())
+
+
+(g1/g2/g3)+plot_layout(heights=c(1, 5, 1))+plot_annotation(title ="Density plot of alcohol by qualityr")
+
+```
+
+Gràficament, podem veure que hi ha diferencies en la distribució de la variable, veient-se que a major valor de alcohol el vi és considerat bo. Per tant, es pot afirmar que la mitjana entre el vi bo és més gran que entre el vi no bo? 
+
+$$H_{0}:\mu_{bo}-\mu_{no\:bo}=0$$
+
+$$H_{0}:\mu_{bo}-\mu_{no\:bo}>0$$
+
+
+```{r}
+
+t.test(x = df2$alcohol[df2$qualityr=="Vi Bo"], y = df2$alcohol[df2$qualityr=="No Vi Bo"], alternative = "greater")
+
+
+```
+
+Com el p-value és inferior al nivell de significació (0.05) hem de rebutjar la hipòtesi nul·la d'igualtat i concloure que a major valor de alcohol es considera que el vi és bo.
+
+
+\newpage
+
+### **Conclusió**
+
+Després de fer els contrasts d'hipòtesi saber si hi ha diferencies en les variables a l'hora de considerar un vi bo es pot dir que un vi és considerat bo pels experts (qualificació de 7,8,9,10) si conté valors alts de fixed.acidity, citric.acid, sulphates i alcohol. En canvi, un vi serà considerat dolent pels experts (qualificació 0,1,2,3,4,5,6) si conté valors alts de volatile.acidity, free.sulfur.dioxide, total.sulfur.dioxide, density i pH.
+
+Abans de passar a la següent secció, guardarem les dades processades que utilitzarem per modelar en el fitxer `winequality-red_net.csv`.
+
+```{r}
+
+write.table(df2,"winequality-red_net.csv",col.names = T, row.names = F,sep=",",dec=".")
+
+```
+
+
+\newpage
+
+# **Model de regressió logística**
+
+```{r}
+
+df<-read.csv("winequality-red_net.csv",header=T,sep=",", dec=".")
+
+```
+
+Per tal de poder fer un model de regressió logística que ens pugui dir si un vi és bo o no generarem dos fitxers a partir del fitxer gran. Un fitxer per a entrenar el model (train - 70% de la mostra) i un fitxer per a testejar-lo (test - 30% de la mostra).
+
+```{r}
+
+set.seed(13)
+
+ind <- sample(seq_len(nrow(df)), size = round(.7 * dim(df)[1]))
+
+train <- df[ind, ]
+test <- df[-ind, ]
+
+cat("Fitxer train - 70% de la mostra\n\n")
+str(train)
+
+cat("\n\nFitxer test - 30% de la mostra\n\n")
+str(test)
+
+```
+
+
+\newpage
+
+Un cop fets els fitxers comprovarem que la variable dependent (qualityr) no es trobi esbiaixada, és a dir, tingui una proporció similar.
+
+```{r}
+
+cat("Fitxer train - 70% de la mostra\n\n")
+
+prop.table(table(train$qualityr))
+
+cat("\n\nFitxer test - 30% de la mostra\n\n")
+
+prop.table(table(test$qualityr))
+
+
+```
+
+Com es pot observar la variable independent es troba en una proporció similar de vi bo (13% vs 14%).
+
+## **Entrenament del model**
+
+```{r}
+
+for(i in 1:nrow(train)){
+train[i,"qualityr2"]<-ifelse(train[i,"quality"]>6,1,0)
+}
+
+```
+
+
+```{r}
+cat("\n\n Entrenament del model \n\n")
+
+modellog <- glm(formula = as.factor(qualityr2) ~ fixed.acidity + volatile.acidity + citric.acid + residual.sugar + chlorides + free.sulfur.dioxide + total.sulfur.dioxide + density + pH + sulphates + alcohol, data = train, family = binomial)
+
+qualimod <- (modellog$null.deviance-modellog$deviance)/(modellog$null.deviance)
+
+summary(modellog)
+
+```
+
+
+Aquest model presenta variables que no són significatives enfront del nivell de significació del 5%. 
+volatile.acidity, citric.acid, free.sulfur.dioxide i pH presenten valors de `Pr(>|z|)` majors que 0.05. La resta de variables sí que són significatives respecte al nivell de significació.
+
+Una manera de mesurar la qualitat del model és comparant la null deviance amb la residual deviance., fent
+la resta de les dues i dividint per la primera. Valors propers a la unitat indiquen bons ajustos, i per contra,
+valors propers a zero n’indiquen una mala qualitat.
+
+Qualitat del model = `r qualimod`
+
+Podem veure que la qualitat del model no és gaire bona, ja que aquest valor es troba més a prop del 0 que de l'1.
+
+Farem un altre prova traient les variables que no són significatives a veure si el model millora una mica.
+
+\newpage
+
+```{r}
+
+cat("\n\n Entrenament del model sense variables no significatives\n\n")
+
+modellog2 <- glm(formula = as.factor(qualityr2) ~ fixed.acidity + residual.sugar + chlorides + total.sulfur.dioxide + density + sulphates + alcohol, data = train, family = binomial)
+
+qualimod2 <- (modellog2$null.deviance-modellog2$deviance)/(modellog2$null.deviance)
+
+summary(modellog2)
+
+```
+
+
+Després de treure les variables no significatives veiem que la qualitat del model baixa una mica (`r qualimod2` vs `r qualimod`) però són molt semblants així que utilitzarem aquest últim model amb menys variables per veure la seva capacitat predictiva.
+
+
+```{r}
+
+cat ("\n\n Odds ratios del model \n\n")
+
+exp(modellog2$coefficients)
+
+```
+
+
+Dintre del model de regressió logística podem veure l'odds ratio que indiquen les variables més importants a l'hora de predir si un vi és bo o no. Aquest valor com més allunyat de la unitat indica que la variable és més rellevant. En aquest cas les variables més rellevants per predir són sulphates i alcohol.
+
+\newpage
+
+## **Predicció del model**
+
+```{r}
+
+for(i in 1:nrow(test)){
+test[i,"qualityr2"]<-ifelse(test[i,"quality"]>6,1,0)
+}
+
+test$qualityr2 <- factor(test$qualityr2,labels=c("No Vi Bo","Vi Bo"))
+
+modelpred2 <- glm(formula = qualityr2 ~ fixed.acidity + residual.sugar + chlorides + total.sulfur.dioxide + density + sulphates + alcohol, data = test, family = binomial)
+
+prediccio<-factor(ifelse(modelpred2$fitted.values >= 0.5,"Vi Bo","No Vi Bo"),
+                   levels=c("No Vi Bo","Vi Bo"))
+
+confusio<-xtabs(~modelpred2$model$qualityr2+prediccio)
+
+resultat<-list("Matriu de Confusió"=confusio,
+               "Matriu de Confusió - %row"=round(prop.table(confusio,1)*100,1),
+               "Ajust"=(sum(confusio[1,1], confusio[2,2])/sum(confusio))*100, 
+               "Sensibilitat"=(confusio[2,2]/sum(confusio[2,2],confusio[2,1]))*100,
+               "Especificitat"=(confusio[1,1]/sum(confusio[1,1],confusio[1,2]))*100)
+print(resultat)
+
+
+```
+
+Com podem veure, aquest model té un ajust molt bo (86%) però pel que podem observar això bé donat perquè troba molt bé quan un vi no és bo (especificitat 97%) però no troba gaire bé quan un vi és bo (sensibilitat 21%).
+
+Llavors, tot i que podríem considerar que és un model bo, no ajuda a poder dir si un vi és considerat bo pels experts.
+
+\newpage
+
+# **Arbre de decisió**
+
+Un altre model que podem utilitzar són els arbres de decisió. Aquest model és una tècnica predictiva que dona com a resultat unes regles de classificació molt intuïtives i amb la seva representació gràfica és molt fàcil d'interpretar.
+
+## **Entrenament del model**
+
+Per tal de poder comparar amb el model de regressió logística, utilitzarem les variables que van sortir significatives a la regressió
+(fixed.acidity, residual.sugar, chlorides, total.sulfur.dioxide, density, sulphates i alcohol).
+
+```{r}
+
+train$qualityr2 <- factor(train$qualityr2,labels=c("No Vi Bo","Vi Bo"))
+
+arbre <- rpart(formula = qualityr2 ~ fixed.acidity + residual.sugar + chlorides + total.sulfur.dioxide + density + sulphates + alcohol, data = train, method ='class', control =rpart.control(maxdepth =5, minsplit =20))
+
+rpart.plot(arbre,extra=104, cex=0.65, faclen = 6, fallen.leaves=T)
+
+```
+
+Les caixes de la filera de sota ens indiques el final dels nodes i, per tant, completen una regla de classificació. A la caixa hi surt l'etiqueta de la probabilitat més alta, les probabilitats dels dos supòsits i el percentatge d'individus a cada caixa.
+
+Per exemple el node de més a la dreta indica que hi ha un 72% de probabilitats que sigui un Vi Bo aquell que alcohol>=12, sulphates >=0.62 i total.sulfur.dioxide < 31.
+
+\newpage
+
+## **Predicció del model**
+
+
+```{r}
+
+arbre_pred <- predict(arbre, newdata = test, type = "class")
+
+confusio<-xtabs(~test$qualityr2+arbre_pred)
+
+resultat<-list("Matriu de Confusió"=confusio,
+               "Matriu de Confusió - %row"=round(prop.table(confusio,1)*100,1),
+               "Ajust"=(sum(confusio[1,1], confusio[2,2])/sum(confusio))*100, 
+               "Sensibilitat"=(confusio[2,2]/sum(confusio[2,2],confusio[2,1]))*100,
+               "Especificitat"=(confusio[1,1]/sum(confusio[1,1],confusio[1,2]))*100)
+print(resultat)
+
+
+```
+
+Com podem veure, aquest model té un ajust molt bo (87%) però pel que podem observar això bé donat perquè troba molt bé quan un vi no és bo (especificitat 93%) però no troba gaire bé quan un vi és bo (sensibilitat 47%).
+
+Si el comparem amb el model de regressió logística, tenim que l'ajust és el mateix (87% vs 86%), l'especificitat si fa no fa també (93% vs 97%) però pel que fa a la sensibilitat hi ha una millora substancial (47% vs 21%). No és que sigui cap meravella, però el model basat en arbres de decisió prediu un Vi Bo molt millor que la regressió logística.
+
+\newpage
+
+# **Conclusió**
+
+Volíem poder saber quan un vi és bo a través de les seves característiques químiques, poder predir com serà el vi sense haver d'anar a preguntar als experts. Per fer això hem utilitzat dos models diferents, regressió logística i arbres de decisió.
+
+Després de realitzar els dos models hem arribat a la conclusió que, tot i que no son cap meravella perquè és més probable saber que un vi és dolent que no pas un vi és bo, el model basat en arbres de decisió és capaç de predir si un vi és bo millor que el model basat en la regressió logística.
+
+
+
+
+
+
+
+
